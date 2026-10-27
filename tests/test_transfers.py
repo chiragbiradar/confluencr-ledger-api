@@ -129,6 +129,31 @@ def test_x7_deadlock_safety(client):
     assert round(bal_a + bal_b, 2) == 200.0
 
 
+def test_x9_transfer_ref_matches_existing_transaction(client):
+    """reference_id used in a prior transaction → transfer returns 409, not 500."""
+    a = make_account(client, "A")
+    b = make_account(client, "B")
+    txn(client, a["id"], "credit", 100, "seed")
+    # Use same reference_id for a direct transaction on a, then try to transfer
+    txn(client, a["id"], "credit", 10, "reused-ref")
+    r = transfer(client, a["id"], b["id"], 5, "reused-ref")
+    assert r.status_code == 409
+    assert r.json()["error"]["code"] == "DUPLICATE_TRANSACTION"
+
+
+def test_x10_blank_description_returns_422(client):
+    """Blank description on transfer request → 422 VALIDATION_ERROR, not 500."""
+    a = make_account(client, "A")
+    b = make_account(client, "B")
+    txn(client, a["id"], "credit", 100, "seed")
+    r = client.post("/transfers", json={
+        "from_account_id": a["id"], "to_account_id": b["id"],
+        "amount": 10, "reference_id": "tr-blank-desc", "description": "   "
+    })
+    assert r.status_code == 422
+    assert r.json()["error"]["code"] == "VALIDATION_ERROR"
+
+
 def test_x8_legs_in_history(client):
     a = make_account(client, "A")
     b = make_account(client, "B")

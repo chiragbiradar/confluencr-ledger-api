@@ -95,4 +95,4 @@ curl -s -X POST localhost:8000/transactions \
 
 ## AI usage
 
-Built with Claude Code. I (Chirag) designed the schema and concurrency approach, reviewed every line, and ran all the tests myself. Confluencr values how you check AI output — that review process is exactly what happened here.
+Designed and built with Claude Code; I reviewed the design and code, and verified it with tests.

@@ -23,71 +23,71 @@ def create_transfer(db: Session, data: TransferCreate) -> dict:
 
     # Lock both accounts in id order to avoid deadlock
     ids_sorted = sorted([from_id, to_id])
-    with db.begin_nested():
-        locked = db.execute(
-            select(Account)
-            .where(Account.id.in_(ids_sorted))
-            .order_by(Account.id)
-            .with_for_update()
-        ).scalars().all()
+    try:
+        with db.begin_nested():
+            locked = db.execute(
+                select(Account)
+                .where(Account.id.in_(ids_sorted))
+                .order_by(Account.id)
+                .with_for_update()
+            ).scalars().all()
 
-        by_id = {a.id: a for a in locked}
-        if from_id not in by_id:
-            raise AppError(404, "ACCOUNT_NOT_FOUND", f"Account '{from_id}' not found")
-        if to_id not in by_id:
-            raise AppError(404, "ACCOUNT_NOT_FOUND", f"Account '{to_id}' not found")
+            by_id = {a.id: a for a in locked}
+            if from_id not in by_id:
+                raise AppError(404, "ACCOUNT_NOT_FOUND", f"Account '{from_id}' not found")
+            if to_id not in by_id:
+                raise AppError(404, "ACCOUNT_NOT_FOUND", f"Account '{to_id}' not found")
 
-        src = by_id[from_id]
-        dst = by_id[to_id]
+            src = by_id[from_id]
+            dst = by_id[to_id]
 
-        if src.balance < data.amount:
-            raise AppError(
-                422,
-                "INSUFFICIENT_BALANCE",
-                f"Account balance {src.balance:.2f} is less than transfer amount {data.amount:.2f}",
+            if src.balance < data.amount:
+                raise AppError(
+                    422,
+                    "INSUFFICIENT_BALANCE",
+                    f"Account balance {src.balance:.2f} is less than transfer amount {data.amount:.2f}",
+                )
+
+            transfer = Transfer(
+                from_account_id=from_id,
+                to_account_id=to_id,
+                amount=data.amount,
+                reference_id=data.reference_id,
+                description=data.description,
             )
-
-        transfer = Transfer(
-            from_account_id=from_id,
-            to_account_id=to_id,
-            amount=data.amount,
-            reference_id=data.reference_id,
-            description=data.description,
-        )
-        db.add(transfer)
-        try:
+            db.add(transfer)
             db.flush()
-        except IntegrityError:
-            db.rollback()
-            raise AppError(409, "DUPLICATE_TRANSACTION", f"Transfer with reference_id '{data.reference_id}' already exists")
 
-        from_new = src.balance - data.amount
-        to_new = dst.balance + data.amount
+            from_new = src.balance - data.amount
+            to_new = dst.balance + data.amount
 
-        debit_leg = Transaction(
-            account_id=from_id,
-            type="debit",
-            amount=data.amount,
-            description=data.description or f"Transfer to {to_id}",
-            reference_id=data.reference_id,
-            transfer_id=transfer.id,
-            balance_after=from_new,
-        )
-        credit_leg = Transaction(
-            account_id=to_id,
-            type="credit",
-            amount=data.amount,
-            description=data.description or f"Transfer from {from_id}",
-            reference_id=data.reference_id,
-            transfer_id=transfer.id,
-            balance_after=to_new,
-        )
-        db.add(debit_leg)
-        db.add(credit_leg)
-        db.flush()
+            debit_leg = Transaction(
+                account_id=from_id,
+                type="debit",
+                amount=data.amount,
+                description=data.description or f"Transfer to {to_id}",
+                reference_id=data.reference_id,
+                transfer_id=transfer.id,
+                balance_after=from_new,
+            )
+            credit_leg = Transaction(
+                account_id=to_id,
+                type="credit",
+                amount=data.amount,
+                description=data.description or f"Transfer from {from_id}",
+                reference_id=data.reference_id,
+                transfer_id=transfer.id,
+                balance_after=to_new,
+            )
+            db.add(debit_leg)
+            db.add(credit_leg)
+            db.flush()
 
-        src.balance = from_new
-        dst.balance = to_new
+            src.balance = from_new
+            dst.balance = to_new
+    except IntegrityError:
+        # SAVEPOINT rolled back; covers duplicate transfer ref and duplicate txn leg ref
+        raise AppError(409, "DUPLICATE_TRANSACTION", f"Transfer with reference_id '{data.reference_id}' already exists")
 
     db.commit()
     db.refresh(transfer)

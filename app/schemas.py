@@ -126,6 +126,13 @@ class TransferCreate(BaseModel):
             raise ValueError("must not be blank")
         return v.strip()
 
+    @field_validator("description")
+    @classmethod
+    def desc_not_blank(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None and not v.strip():
+            raise ValueError("description must not be blank if provided")
+        return v.strip() if v else v
+
     @field_validator("amount", mode="before")
     @classmethod
     def validate_amount(cls, v):
