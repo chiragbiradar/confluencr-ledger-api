@@ -24,7 +24,7 @@ class Account(Base):
     id = Column(UUID(as_uuid=False), primary_key=True, default=_uuid)
     name = Column(String(100), nullable=False)
     balance = Column(Numeric(18, 2), nullable=False, server_default=text("0"))
-    created_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default=text("now()"))
+    created_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default=text("clock_timestamp()"))
 
     transactions = relationship("Transaction", back_populates="account", foreign_keys="Transaction.account_id")
 
@@ -42,7 +42,7 @@ class Transfer(Base):
     amount = Column(Numeric(18, 2), nullable=False)
     reference_id = Column(String(100), nullable=False, unique=True)
     description = Column(String(255))
-    created_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default=text("now()"))
+    created_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default=text("clock_timestamp()"))
 
     from_account = relationship("Account", foreign_keys=[from_account_id])
     to_account = relationship("Account", foreign_keys=[to_account_id])
@@ -68,7 +68,7 @@ class Transaction(Base):
     reference_id = Column(String(100), nullable=False)
     transfer_id = Column(UUID(as_uuid=False), ForeignKey("transfers.id"), nullable=True)
     balance_after = Column(Numeric(18, 2), nullable=False)
-    created_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default=text("now()"))
+    created_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default=text("clock_timestamp()"))
 
     account = relationship("Account", back_populates="transactions", foreign_keys=[account_id])
     transfer = relationship("Transfer", back_populates="transactions")
